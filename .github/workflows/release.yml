@@ -1,0 +1,54 @@
+name: Release Model Files
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'models/**'
+      - 'ort/**'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Create Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION=$(date +'v%Y.%m.%d.%H%M')
+        gh release create $VERSION \
+          models/rphys/SCAMPS_Multi_9x9.onnx \
+          models/rphys/config.json \
+          ort/*.wasm \
+          --title "Model Files $VERSION" \
+          --notes "Automated model and WASM file release"
+
+  verify-cdn-links:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Verify jsDelivr Links
+      run: |
+        REPO="jnj256/rphys-assets"
+        VERSION=${{ github.ref_name }}
+        
+        # List of files to verify
+        FILES=(
+          "models/rphys/SCAMPS_Multi_9x9.onnx"
+          "models/rphys/config.json"
+          "ort/ort-wasm.wasm"
+          "ort/ort-wasm-simd.wasm"
+          "ort/ort-wasm-threaded.wasm"
+          "ort/ort-wasm-simd-threaded.wasm"
+        )
+        
+        for file in "${FILES[@]}"; do
+          URL="https://cdn.jsdelivr.net/gh/${REPO}@${VERSION}/${file}"
+          echo "Checking $URL"
+          if ! curl -f -L "$URL" > /dev/null 2>&1; then
+            echo "Failed to access $URL"
+            exit 1
+          fi
+        done
